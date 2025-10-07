@@ -43,7 +43,6 @@ class SyncMatchesCommand extends Command
             $content  = $response->getBody()->getContents();
 
             if (str_contains($content, '<title>Performance selection')) {
-                file_put_contents(storage_path('debug/html/matches.html'), $content);
                 $this->sync($content);
 
                 sleep(60);
@@ -62,12 +61,8 @@ class SyncMatchesCommand extends Command
         $this->syncCategories(true);
     }
 
-    private function syncMatches(string $content = null)
+    private function syncMatches(string $content)
     {
-        if (null === $content) {
-            $content = file_get_contents(storage_path('debug/html/matches.html'));
-        }
-
         $crawler = new Crawler();
         $crawler->addHtmlContent($content);
 
@@ -93,40 +88,27 @@ class SyncMatchesCommand extends Command
         foreach ($matches as $match) {
             MatchObject::updateOrCreate(['id' => $match['id']], Arr::except($match, ['id']));
         }
-
-        file_put_contents(storage_path('debug/json/matches.json'), json_encode($matches, JSON_PRETTY_PRINT));
     }
 
-    private function syncCategories(bool $remote)
+    private function syncCategories()
     {
-        $categories            = [];
-        $matches               = json_decode(file_get_contents(storage_path('debug/json/matches.json')), true);
-        $matchesWithCategories = [];
+        $matches = MatchObject::all();
 
         foreach ($matches as $match) {
-            if ($remote) {
-                try {
-                    $response = $this->client->get('selection/event/seat/performance/' . $match['id'] . '/contact-advantages/10229516236677,10229516236679/lang/en');
-                    $content  = $response->getBody()->getContents();
-                } catch (RequestException $e) {
-                    file_put_contents(storage_path('debug/html/match_error_' . $match['id'] . '.html'), $e->getResponse()->getBody()->getContents());
+            try {
+                $response = $this->client->get('selection/event/seat/performance/' . $match['id'] . '/contact-advantages/10229516236677,10229516236679/lang/en');
+                $content  = $response->getBody()->getContents();
+            } catch (RequestException $e) {
+                $this->logger->error('Failed to read ' . $match['id'] . ' product page: ' . $e->getMessage());
 
-                    $this->logger->error('Failed to read ' . $match['id'] . ' product page: ' . $e->getMessage());
-
-                    continue;
-                }
-            } else {
-                $content = file_get_contents(storage_path('debug/html/match_' . $match['id'] . '.html'));
+                continue;
             }
 
-            $this->syncMatchCategories($match, $content, $matches, $categories, $matchesWithCategories);
+            $this->syncMatchCategories($match, $content);
         }
-
-        file_put_contents(storage_path('debug/json/categories_' . time() . '.json'), json_encode($categories, JSON_PRETTY_PRINT));
-        file_put_contents(storage_path('debug/json/matches_with_categories.json'), json_encode(array_values($matchesWithCategories), JSON_PRETTY_PRINT));
     }
 
-    private function syncMatchCategories(array $match, string $html, &$matches, &$categories, &$matchesWithCategories)
+    private function syncMatchCategories(MatchObject $match, string $html)
     {
         $crawler = new Crawler();
         $crawler->addHtmlContent($html);
@@ -143,11 +125,6 @@ class SyncMatchesCommand extends Command
             $priceMax = (int) $node->filter('.resale_max')->attr('data-amount', 0);
 
             if ($id && $product && $priceMin && $priceMax) {
-                if (!isset($matchesWithCategories[$match['id']])) {
-                    $matchesWithCategories[$match['id']]               = $match;
-                    $matchesWithCategories[$match['id']]['categories'] = [];
-                }
-
                 $category = [
                     'id'        => $id,
                     'name'      => $product,
@@ -162,21 +139,17 @@ class SyncMatchesCommand extends Command
                         group by match_id, category_id
                     ) l
                     join match_category_updates c on (c.id = l.max_id)
-                    where l.match_id = ? and l.category_id = ?", [$match['id'], $category['id']]);
+                    where l.match_id = ? and l.category_id = ?", [$match->id, $category['id']]);
 
                 if (!$recent || $recent->price_min != $category['price_min'] || $recent->price_max != $category['price_max']) {
                     MatchCategoryUpdate::create([
-                        'match_id'    => $match['id'],
-                        'category_id' => $category['id'],
-                        'price_min'   => $category['price_min'],
-                        'price_max'   => $category['price_max']
+                        'match_id'      => $match->id,
+                        'category_id'   => $category['id'],
+                        'category_name' => $category['name'],
+                        'price_min'     => $category['price_min'],
+                        'price_max'     => $category['price_max']
                     ]);
                 }
-
-                $matchesWithCategories[$match['id']]['categories'][] = $category;
-
-                $category['match'] = $match;
-                $categories[]      = $category;
             }
         });
     }

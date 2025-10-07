@@ -11,6 +11,7 @@ class MatchCategoryUpdate extends Model
         'id',
         'match_id',
         'category_id',
+        'category_name',
         'price_min',
         'price_max'
     ];
