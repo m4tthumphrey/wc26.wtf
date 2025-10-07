@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands\Resale;
 
+use App\Models\MatchCategory;
 use App\Models\MatchCategoryUpdate;
 use App\Models\MatchObject;
 use App\Services\ResaleClient;
@@ -70,7 +71,6 @@ class SyncMatchesCommand extends Command
         $crawler->filter('.performance')->each(function (Crawler $node) use (&$matches) {
             $id        = $node->attr('id');
             $venueId   = $node->attr('data-venue-id');
-            $venueName = $node->filter('span.site')->attr('title');
             $date      = $node->filter('.date_time_container')->text();
             $code      = $node->filter('.match_round_code')->text();
             $stage     = $node->ancestors()->ancestors()->ancestors()->ancestors()->filter('div > div > h3')->text();
@@ -78,7 +78,6 @@ class SyncMatchesCommand extends Command
             $matches[] = [
                 'id'         => $id,
                 'venue_id'   => $venueId,
-                'venue_name' => $venueName,
                 'date'       => Carbon::createFromFormat('D j M H:i', $date),
                 'code'       => $code,
                 'stage'      => $stage
@@ -141,11 +140,16 @@ class SyncMatchesCommand extends Command
                     join match_category_updates c on (c.id = l.max_id)
                     where l.match_id = ? and l.category_id = ?", [$match->id, $category['id']]);
 
+
+                MatchCategory::updateOrCreate(['id' => $category['id']], [
+                    'venue_id' => $match->venue_id,
+                    'name'     => $category['name']
+                ]);
+
                 if (!$recent || $recent->price_min != $category['price_min'] || $recent->price_max != $category['price_max']) {
                     MatchCategoryUpdate::create([
                         'match_id'      => $match->id,
                         'category_id'   => $category['id'],
-                        'category_name' => $category['name'],
                         'price_min'     => $category['price_min'],
                         'price_max'     => $category['price_max']
                     ]);
