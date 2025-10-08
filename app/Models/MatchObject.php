@@ -16,5 +16,9 @@ class MatchObject extends Model
         'stage'
     ];
 
+    protected $casts = [
+        'date' => 'date:Y-m-d'
+    ];
+
     public $incrementing = false;
 }
