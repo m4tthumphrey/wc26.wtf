@@ -27,23 +27,15 @@ class SyncMatchesCommand extends Command
         $this->client = $client;
         $this->logger = $logger;
 
-        if ($this->option('matches')) {
-            $this->syncMatches();
-
-            return;
-        }
-
-        if ($this->option('categories')) {
-            $this->syncCategories(false);
-
-            return;
-        }
-
         while (true) {
+            $this->logger->debug('Attempting to load product listing page');
+
             $response = $this->client->get('selection/event/date/product/10229225515651/contact-advantages/10229516236677,10229516236679/lang/en');
             $content  = $response->getBody()->getContents();
 
             if (str_contains($content, '<title>Performance selection')) {
+                $this->logger->debug('Detected valid product listing page');
+
                 $this->sync($content);
 
                 sleep(60);
@@ -59,7 +51,7 @@ class SyncMatchesCommand extends Command
     public function sync(string $content)
     {
         $this->syncMatches($content);
-        $this->syncCategories(true);
+        $this->syncCategories();
     }
 
     private function syncMatches(string $content)
@@ -69,23 +61,35 @@ class SyncMatchesCommand extends Command
 
         $matches = [];
         $crawler->filter('.performance')->each(function (Crawler $node) use (&$matches) {
-            $id        = $node->attr('id');
-            $venueId   = $node->attr('data-venue-id');
-            $date      = $node->filter('.date_time_container')->text();
-            $code      = $node->filter('.match_round_code')->text();
-            $stage     = $node->ancestors()->ancestors()->ancestors()->ancestors()->filter('div > div > h3')->text();
+            $id      = $node->attr('id');
+            $venueId = $node->attr('data-venue-id');
+            $date    = $node->filter('.date_time_container')->text();
+            $code    = $node->filter('.match_round_code')->text();
+            $stage   = $node->ancestors()->ancestors()->ancestors()->ancestors()->filter('div > div > h3')->text();
 
             $matches[] = [
-                'id'         => $id,
-                'venue_id'   => $venueId,
-                'date'       => Carbon::createFromFormat('D j M H:i', $date),
-                'code'       => $code,
-                'stage'      => $stage
+                'id'       => $id,
+                'venue_id' => $venueId,
+                'date'     => Carbon::createFromFormat('D j M H:i', $date),
+                'code'     => $code,
+                'stage'    => $stage
             ];
         });
 
         foreach ($matches as $match) {
-            MatchObject::updateOrCreate(['id' => $match['id']], Arr::except($match, ['id']));
+            $matchObject = MatchObject::find($match['id']);
+
+            if (null === $matchObject) {
+                $this->logger->debug('Detected new match ' . $match['id']);
+                $matchObject = new MatchObject();
+            }
+
+            $matchObject->fill(Arr::except($match, ['id']));
+
+            if ($matchObject->isDirty()) {
+                $this->logger->debug('Saved match ' . $matchObject->id);
+                $matchObject->save();
+            }
         }
     }
 
@@ -94,11 +98,13 @@ class SyncMatchesCommand extends Command
         $matches = MatchObject::all();
 
         foreach ($matches as $match) {
+            $this->logger->debug('Attempting to load match ' . $match->id . ' page');
+
             try {
                 $response = $this->client->get('selection/event/seat/performance/' . $match['id'] . '/contact-advantages/10229516236677,10229516236679/lang/en');
                 $content  = $response->getBody()->getContents();
             } catch (RequestException $e) {
-                $this->logger->error('Failed to read ' . $match['id'] . ' product page: ' . $e->getMessage());
+                $this->logger->error('Failed to read match ' . $match->id . ' page: ' . $e->getMessage());
 
                 continue;
             }
@@ -140,18 +146,32 @@ class SyncMatchesCommand extends Command
                     join match_category_updates c on (c.id = l.max_id)
                     where l.match_id = ? and l.category_id = ?", [$match->id, $category['id']]);
 
+                $categoryObject = MatchObject::find($category['id']);
 
-                MatchCategory::updateOrCreate(['id' => $category['id']], [
+                if (null === $categoryObject) {
+                    $this->logger->debug('Detected new category ' . $category['id']);
+                    $categoryObject = new MatchCategory();
+                }
+
+                $categoryObject->fill([
+                    'id'       => $category['id'],
                     'venue_id' => $match->venue_id,
                     'name'     => $category['name']
                 ]);
 
+                if ($categoryObject->isDirty()) {
+                    $this->logger->debug('Saved category ' . $categoryObject->id);
+                    $categoryObject->save();
+                }
+
                 if (!$recent || $recent->price_min != $category['price_min'] || $recent->price_max != $category['price_max']) {
+                    $this->logger->error('Detected new price for match ' . $match->id . ', category ' . $category['id']);
+
                     MatchCategoryUpdate::create([
-                        'match_id'      => $match->id,
-                        'category_id'   => $category['id'],
-                        'price_min'     => $category['price_min'],
-                        'price_max'     => $category['price_max']
+                        'match_id'    => $match->id,
+                        'category_id' => $category['id'],
+                        'price_min'   => $category['price_min'],
+                        'price_max'   => $category['price_max']
                     ]);
                 }
             }
