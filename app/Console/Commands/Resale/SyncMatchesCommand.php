@@ -146,7 +146,7 @@ class SyncMatchesCommand extends Command
                     join match_category_updates c on (c.id = l.max_id)
                     where l.match_id = ? and l.category_id = ?", [$match->id, $category['id']]);
 
-                $categoryObject = MatchObject::find($category['id']);
+                $categoryObject = MatchCategory::find($category['id']);
 
                 if (null === $categoryObject) {
                     $this->logger->debug('Detected new category ' . $category['id']);
