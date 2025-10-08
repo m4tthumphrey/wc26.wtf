@@ -3,7 +3,6 @@
 namespace App\Providers;
 
 use App\Services\FifaCookies;
-use GuzzleHttp\Cookie\CookieJar;
 use GuzzleHttp\Cookie\SetCookie;
 use Illuminate\Support\ServiceProvider;
 
@@ -14,14 +13,7 @@ class ResaleServiceProvider extends ServiceProvider
         $clients = $this->app->make('config')->get('fifa.clients');
 
         $this->app->singleton(FifaCookies::class, function () {
-            $cookieJar = new CookieJar();
-            $cookies   = json_decode($this->app->make('cache.store')->get(FifaCookies::CACHE_KEY), true);
-
-            foreach ($cookies as $cookie) {
-                $cookieJar->setCookie(new SetCookie($cookie));
-            }
-
-            return $cookieJar;
+            return FifaCookies::load($this->app->make('cache.store'));
         });
 
         foreach ($clients as $name => $clientConfig) {

@@ -6,6 +6,7 @@ use App\Services\AuthClient;
 use App\Services\DavinciClient;
 use App\Services\FifaCookies;
 use App\Services\ResaleClient;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Cache\Repository as CacheRepository;
 use Illuminate\Config\Repository as ConfigRepository;
 use Illuminate\Console\Command;
@@ -32,7 +33,12 @@ class ReauthenticateCommand extends Command
         $this->davinciClient = $davinciClient;
         $this->authClient = $authClient;
 
-        $response = $this->resaleClient->get('selection/event/date/product/10229225515651/contact-advantages/10229516236677,10229516236679/lang/en');
+        try {
+            $response = $this->resaleClient->get('selection/event/date/product/10229225515651/contact-advantages/10229516236677,10229516236679/lang/en');
+        } catch (RequestException $e) {
+            $response = $e->getResponse();
+        }
+
         $content = $response->getBody()->getContents();
 
         file_put_contents(storage_path('debug/html/initial_request.html'), $content);
@@ -88,7 +94,7 @@ class ReauthenticateCommand extends Command
         $content = $response->getBody()->getContents();
         file_put_contents(storage_path('debug/html/matches.html'), $content);
 
-        $cache->put(FifaCookies::CACHE_KEY, json_encode($cookies->toArray(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        $cookies->save($cache);
     }
 
     private function davinciRequest(
