@@ -7,6 +7,7 @@ use App\Models\MatchCategoryUpdate;
 use App\Models\MatchObject;
 use App\Services\ResaleClient;
 use Carbon\Carbon;
+use Exception;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Console\Command;
 use Illuminate\Support\Arr;
@@ -43,7 +44,11 @@ class SyncMatchesCommand extends Command
                 if ($poll) {
                     sleep($poll);
                 }
+
+                continue;
             }
+
+            throw new Exception('Could not load performance page');
         } while ($poll);
     }
 
