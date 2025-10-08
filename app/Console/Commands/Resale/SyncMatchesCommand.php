@@ -103,6 +103,8 @@ class SyncMatchesCommand extends Command
             try {
                 $response = $this->client->get('selection/event/seat/performance/' . $match['id'] . '/contact-advantages/10229516236677,10229516236679/lang/en');
                 $content  = $response->getBody()->getContents();
+
+                $this->logger->debug('Loaded match ' . $match->id . ' page');
             } catch (RequestException $e) {
                 $this->logger->error('Failed to read match ' . $match->id . ' page: ' . $e->getMessage());
 
