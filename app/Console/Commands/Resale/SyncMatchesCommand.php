@@ -70,7 +70,7 @@ class SyncMatchesCommand extends Command
             $matches[] = [
                 'id'       => $id,
                 'venue_id' => $venueId,
-                'date'     => Carbon::createFromFormat('D j M H:i', $date),
+                'date'     => Carbon::createFromFormat('D j M H:i', $date)->format('Y-m-d'),
                 'code'     => $code,
                 'stage'    => $stage
             ];
