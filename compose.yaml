@@ -1,7 +1,7 @@
 services:
     wc26.wtf:
         build:
-            context: './vendor/laravel/sail/runtimes/8.4'
+            context: '${DOCKER_CONTEXT:-./vendor/laravel/sail/runtimes/8.4}'
             dockerfile: Dockerfile
             args:
                 WWWGROUP: '${WWWGROUP}'
