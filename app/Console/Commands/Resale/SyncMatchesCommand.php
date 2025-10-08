@@ -27,7 +27,9 @@ class SyncMatchesCommand extends Command
         $this->client = $client;
         $this->logger = $logger;
 
-        while (true) {
+        $poll = $this->option('poll');
+
+        do {
             $this->logger->debug('Attempting to load product listing page');
 
             $response = $this->client->get('selection/event/date/product/10229225515651/contact-advantages/10229516236677,10229516236679/lang/en');
@@ -38,14 +40,11 @@ class SyncMatchesCommand extends Command
 
                 $this->sync($content);
 
-                sleep(60);
-                continue;
+                if ($poll) {
+                    sleep($poll);
+                }
             }
-
-            $this->error('Logged out?');
-
-            return;
-        }
+        } while ($poll);
     }
 
     public function sync(string $content)
@@ -184,7 +183,8 @@ class SyncMatchesCommand extends Command
     {
         return [
             ['matches', null, InputOption::VALUE_NONE],
-            ['categories', null, InputOption::VALUE_NONE]
+            ['categories', null, InputOption::VALUE_NONE],
+            ['poll', null, InputOption::VALUE_REQUIRED]
         ];
     }
 }
